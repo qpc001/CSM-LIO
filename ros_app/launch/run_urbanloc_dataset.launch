@@ -37,7 +37,7 @@
   </node>
 
   <!-- UrbanLoc数据集 -->
-  <arg name="bag_filename" default="/home/wgh/wgh_bags/HK-Data20190117.bag"/>
+  <arg name="bag_filename" default="/home/msi/shared_dir/dataset/test2.bag"/>
   
   <node name="playbag" pkg="rosbag" type="play"
     args="--clock -s 100 -r 1.0 $(arg bag_filename)" />

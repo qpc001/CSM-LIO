@@ -51,10 +51,13 @@ class InterpolatedGrid {
   template <typename T>
   T GetInterpolatedValue(const T& x, const T& y, const T& z) const {
     double x1, y1, z1, x2, y2, z2;
+    // 输入给定点坐标, 返回两个网格中心点，这两个对应的网格对应于给定点的最小/最大边界
     ComputeInterpolationDataPoints(x, y, z, &x1, &y1, &z1, &x2, &y2, &z2);
 
+    // 输入给定点坐标, 获取所在网格的idx
     const Eigen::Array3i index1 =
         hybrid_grid_.GetCellIndex(Eigen::Vector3f(x1, y1, z1));
+    // 获取给定网格的概率
     const double q111 = GetValue(hybrid_grid_, index1);
     const double q112 =
         GetValue(hybrid_grid_, index1 + Eigen::Array3i(0, 0, 1));
@@ -104,29 +107,56 @@ class InterpolatedGrid {
   }
 
  private:
+  /**
+   * @brief 输入给定点坐标, 返回两个网格中心点，这两个对应的网格对应于给定点的最小/最大边界
+   * @tparam T
+   * @param x
+   * @param y
+   * @param z
+   * @param x1
+   * @param y1
+   * @param z1
+   * @param x2
+   * @param y2
+   * @param z2
+   */
   template <typename T>
   void ComputeInterpolationDataPoints(const T& x, const T& y, const T& z,
                                       double* x1, double* y1, double* z1,
                                       double* x2, double* y2,
                                       double* z2) const {
+    // 输入给定点坐标，返回一个距离该点比较接近的网格中心点，并且确保返回点center坐标均小于给定点(x, y, z)
     const Eigen::Vector3f lower = CenterOfLowerVoxel(x, y, z);
     *x1 = lower.x();
     *y1 = lower.y();
     *z1 = lower.z();
+    // 在上面这个点(x1,y1,z1)的基础上，在x,y,z三个维度上在加一个网格的距离，得到(x2,y2,z2)
     *x2 = lower.x() + hybrid_grid_.resolution();
     *y2 = lower.y() + hybrid_grid_.resolution();
     *z2 = lower.z() + hybrid_grid_.resolution();
+    // 确保给定点的范围在两个网格中心点中间(x1,y1,z1) ~ (x2,y2,z2)
   }
 
+  /**
+   * @brief 输入给定点坐标，返回一个距离该点比较接近的网格中心点，并且确保返回点center坐标均小于给定点(x, y, z)
+   * 注意：返回的网格中心点的网格不一定包含给定点(x,y,z)
+   * @param x
+   * @param y
+   * @param z
+   * @return 返回center坐标均小于给定点(x, y, z)
+   */
   // Center of the next lower voxel, i.e., not necessarily the voxel containing
   // (x, y, z). For each dimension, the largest voxel index so that the
   // corresponding center is at most the given coordinate.
   Eigen::Vector3f CenterOfLowerVoxel(const double x, const double y,
                                      const double z) const {
     // Center of the cell containing (x, y, z).
+    // 获取包含点(x, y, z)的网格的中心点坐标
     Eigen::Vector3f center = hybrid_grid_.GetCenterOfCell(
         hybrid_grid_.GetCellIndex(Eigen::Vector3f(x, y, z)));
     // Move to the next lower voxel center.
+    // 如果这个中心点坐标的哪个维度的值大于给定点坐标，则center坐标在该维度减一个网格的距离
+    // 确保center坐标均小于给定点(x, y, z)
     if (center.x() > x) {
       center.x() -= hybrid_grid_.resolution();
     }

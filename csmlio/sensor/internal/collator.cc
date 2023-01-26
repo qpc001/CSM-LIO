@@ -20,11 +20,18 @@
 namespace csmlio {
 namespace sensor {
 
+/**
+ * @brief 主要作用: 为指定的某个传感器的消息队列设置回调函数
+ * @param trajectory_id  轨迹ID
+ * @param expected_sensor_ids 传感器id (字符串)
+ * @param callback 回调函数，这里进来的是 sensor_collator_->AddTrajectory 时的lambda函数
+ */
 void Collator::AddTrajectory(
     const int trajectory_id,
     const absl::flat_hash_set<std::string>& expected_sensor_ids,
     const Callback& callback) 
 {
+    // 也就是说，对于同一个轨迹id的所有回调，都是这里的callback
     for (const auto& sensor_id : expected_sensor_ids) {
         const auto queue_key = QueueKey{trajectory_id, sensor_id};
         queue_.AddQueue(queue_key,
@@ -43,6 +50,11 @@ void Collator::FinishTrajectory(const int trajectory_id)
     }
 }
 
+/**
+ * @brief 主要的操作,添加传感器数据,数据形式是:key+data
+ * @param trajectory_id
+ * @param data
+ */
 void Collator::AddSensorData(const int trajectory_id,
                              std::unique_ptr<Data> data) 
 {

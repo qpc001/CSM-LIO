@@ -41,6 +41,14 @@ class Dispatchable : public Data {
     const DataType data_;
 };
 
+/**
+ * @brief 将各个数据类型封装成std::unique_ptr<Dispatchable<DataType>>形式，
+ *        这个函数对于后面的数据分发有重要作用
+ * @tparam DataType 原本的数据类型
+ * @param sensor_id
+ * @param data
+ * @return
+ */
 template <typename DataType>
 std::unique_ptr<Dispatchable<DataType>> MakeDispatchable(
     const std::string &sensor_id, const DataType &data) {

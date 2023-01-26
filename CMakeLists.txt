@@ -51,7 +51,10 @@ if(NOT absl_FOUND)
   message(FATAL_ERROR "absl not found.")
 endif()
 
-find_package(Protobuf 3.0.0 REQUIRED)
+#set(Protobuf_DIR  /home/msi/shared_dir/tools/protobuf-cpp-3.10.1/protobuf-3.10.1/install/lib/)
+#find_package(Protobuf 3.10.0 REQUIRED)
+SET(PROTOBUF_INCLUDE_DIR /home/msi/shared_dir/tools/protobuf-cpp-3.4.0/protobuf-3.4.0/install/include)
+SET(PROTOBUF_LIBRARY /home/msi/shared_dir/tools/protobuf-cpp-3.4.0/protobuf-3.4.0/install/lib/libprotobuf.so)
 
 include(FindPkgConfig)
 PKG_SEARCH_MODULE(CAIRO REQUIRED cairo>=1.12.16)
@@ -317,46 +320,46 @@ set_target_properties(${PROJECT_ROS_APP_NODE} PROPERTIES
 
 # TODO: 如果找到了文件夹和CMakeLists文件，才执行编译。
 
-set(DYNC_REMOVER_SRCS 
-  online_dynamic_remover/online_dynamic_remover.cpp
-  online_dynamic_remover/points_batch.cc
-)
-
-set(DYNC_REMOVER_HDRS 
-  online_dynamic_remover/online_dynamic_remover.h
-  online_dynamic_remover/points_batch.h
-  online_dynamic_remover/incremental_grid.h
-)
-
-set(PROJECT_DYNC_REMOVER_NODE "online_dynamic_removal_and_mapping") #可执行文件名应与ROS节点名相同 
-
-add_library(${PROJECT_DYNC_REMOVER_NODE} STATIC ${DYNC_REMOVER_HDRS} ${DYNC_REMOVER_SRCS})
-
-target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${PROJECT_CORE})
-
-# Lua
-target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC ${LUA_INCLUDE_DIR})
-
-# PCL
-target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC ${PCL_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${PCL_LIBRARIES})
-
-# Eigen
-target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC
-  "${EIGEN3_INCLUDE_DIR}")
-
-# Boost
-target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC
-  "${Boost_INCLUDE_DIRS}")
-target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${Boost_LIBRARIES})
-
-# Catkin
-target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC ${catkin_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${catkin_LIBRARIES})
-
-set(DYNC_REMOVER_COMPILE_FLAGS "${CORE_COMPILE_FLAGS}")  # CORE_COMPILE_FLAGS  ROS_APP_COMPILE_FLAGS
-message(STATUS "######### DYNC_REMOVER_COMPILE_FLAGS: ${DYNC_REMOVER_COMPILE_FLAGS}")
-set_target_properties(${PROJECT_DYNC_REMOVER_NODE} PROPERTIES
-  COMPILE_FLAGS ${DYNC_REMOVER_COMPILE_FLAGS})
+#set(DYNC_REMOVER_SRCS
+#  online_dynamic_remover/online_dynamic_remover.cpp
+#  online_dynamic_remover/points_batch.cc
+#)
+#
+#set(DYNC_REMOVER_HDRS
+#  online_dynamic_remover/online_dynamic_remover.h
+#  online_dynamic_remover/points_batch.h
+#  online_dynamic_remover/incremental_grid.h
+#)
+#
+#set(PROJECT_DYNC_REMOVER_NODE "online_dynamic_removal_and_mapping") #可执行文件名应与ROS节点名相同
+#
+#add_library(${PROJECT_DYNC_REMOVER_NODE} STATIC ${DYNC_REMOVER_HDRS} ${DYNC_REMOVER_SRCS})
+#
+#target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${PROJECT_CORE})
+#
+## Lua
+#target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC ${LUA_INCLUDE_DIR})
+#
+## PCL
+#target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC ${PCL_INCLUDE_DIRS})
+#target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${PCL_LIBRARIES})
+#
+## Eigen
+#target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC
+#  "${EIGEN3_INCLUDE_DIR}")
+#
+## Boost
+#target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC
+#  "${Boost_INCLUDE_DIRS}")
+#target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${Boost_LIBRARIES})
+#
+## Catkin
+#target_include_directories(${PROJECT_DYNC_REMOVER_NODE} SYSTEM PUBLIC ${catkin_INCLUDE_DIRS})
+#target_link_libraries(${PROJECT_DYNC_REMOVER_NODE} PUBLIC ${catkin_LIBRARIES})
+#
+#set(DYNC_REMOVER_COMPILE_FLAGS "${CORE_COMPILE_FLAGS}")  # CORE_COMPILE_FLAGS  ROS_APP_COMPILE_FLAGS
+#message(STATUS "######### DYNC_REMOVER_COMPILE_FLAGS: ${DYNC_REMOVER_COMPILE_FLAGS}")
+#set_target_properties(${PROJECT_DYNC_REMOVER_NODE} PROPERTIES
+#  COMPILE_FLAGS ${DYNC_REMOVER_COMPILE_FLAGS})
 
 

@@ -28,6 +28,12 @@ TfBridge::TfBridge(const std::string& tracking_frame,
       lookup_transform_timeout_sec_(lookup_transform_timeout_sec),
       buffer_(buffer) {}
 
+/**
+ * @brief 查询输入坐标系到tracking_frame_的TF变换
+ * @param time 指定时间
+ * @param frame_id 输入的指定坐标系
+ * @return TF外参（已经转换为cartographer内部格式Rigid3d）
+ */
 std::unique_ptr<::csmlio::transform::Rigid3d> TfBridge::LookupToTracking(
     const ::csmlio::common::Time time,
     const std::string& frame_id) const 

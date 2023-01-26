@@ -41,36 +41,45 @@ struct TrajectoryNodePose {
   absl::optional<ConstantPoseData> constant_pose_data;
 };
 
+// 轨迹节点结构体(重力对齐四元数, 重力对齐并且滤波后的点云 , {} {} {} ,
+//              局部SLAM的节点位姿(scanMatching位姿估计: 机器人在子图坐标系的坐标) )
 struct TrajectoryNode {
   struct Data {
     common::Time time;
 
     // Transform to approximately gravity align the tracking frame as
     // determined by local SLAM.
+    // 重力对齐
     Eigen::Quaterniond gravity_alignment;
 
     // Used for loop closure in 2D: voxel filtered returns in the
     // 'gravity_alignment' frame.
+    // 将点云进行重力对齐 (在2D的闭环中使用)
     sensor::PointCloud filtered_gravity_aligned_point_cloud;
 
     // Used for loop closure in 3D.
+    // 这是在3D使用的
     sensor::PointCloud high_resolution_point_cloud;
     sensor::PointCloud low_resolution_point_cloud;
     Eigen::VectorXf rotational_scan_matcher_histogram;
 
     // The node pose in the local SLAM frame.
+    // 局部SLAM的节点位姿(节点相对于local map的位姿 ,即 节点坐标系到local map坐标系的变换)
     transform::Rigid3d local_pose;
   };
 
+  // 常量时间
   common::Time time() const { return constant_data->time; }
 
   int node_id;
 
   // This must be a shared_ptr. If the data is used for visualization while the
   // node is being trimmed, it must survive until all use finishes.
+  // 这个常量数据必须是share的,需要维护到最后使用完成
   std::shared_ptr<const Data> constant_data;
 
   // The node pose in the global SLAM frame.
+  // 节点的全局位姿
   transform::Rigid3d global_pose;
 };
 

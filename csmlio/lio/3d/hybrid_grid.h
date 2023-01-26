@@ -65,12 +65,21 @@ bool IsDefaultValue(const std::vector<TElementType>& v) {
 
 // A flat grid of '2^kBits' x '2^kBits' x '2^kBits' voxels storing values of
 // type 'ValueType' in contiguous memory. Indices in each dimension are 0-based.
+/**
+ * @brief 3D地图结构的最底层数据，内部储存了('2^kBits' x '2^kBits' x '2^kBits')个网格的数据，对应3维
+ * @tparam TValueType
+ * @tparam kBits 表示每个维度上有(2^kBits)个网格(voxel)
+ */
 template <typename TValueType, int kBits>
 class FlatGrid {
  public:
   using ValueType = TValueType;
 
   // Creates a new flat grid with all values being default constructed.
+  /**
+   * @brief 构造函数，初始化cells_数组
+   * cells_数组大小为 2^{3kBits}
+   */
   FlatGrid() {
     for (ValueType& value : cells_) {
       value = ValueType();
@@ -81,19 +90,23 @@ class FlatGrid {
   FlatGrid& operator=(const FlatGrid&) = delete;
 
   // Returns the number of voxels per dimension.
+  // 返回每个维度上的网格(voxel)数量
   static int grid_size() { return 1 << kBits; }
 
   // Returns the value stored at 'index', each dimension of 'index' being
   // between 0 and grid_size() - 1.
+  // 输入3维索引，返回该索引在数组中对应的元素
   ValueType value(const Eigen::Array3i& index) const {
     return cells_[ToFlatIndex(index, kBits)];
   }
 
   // Returns a pointer to a value to allow changing it.
+  // 输入3维索引，返回该索引在数组中对应的元素指针，便于修改
   ValueType* mutable_value(const Eigen::Array3i& index) {
     return &cells_[ToFlatIndex(index, kBits)];
   }
 
+  // 内部实现了一个简单迭代器
   // An iterator for iterating over all values not comparing equal to the
   // default constructed value.
   class Iterator {
@@ -140,30 +153,65 @@ class FlatGrid {
 // A grid consisting of '2^kBits' x '2^kBits' x '2^kBits' grids of type
 // 'WrappedGrid'. Wrapped grids are constructed on first access via
 // 'mutable_value()'.
+/**
+ * @brief 中间数据层，内部包含了('2^kBits_2' x '2^kBits_2' x '2^kBits_2')个FlatGrid，
+ * 也就是每个NestedGrid，内部包含了(2^kBits_1 x 2^kBits_2, 2^kBits_1 x 2^kBits_2， 2^kBits_1 x 2^kBits_2)个网格
+ * @tparam WrappedGrid 传进来的是FlatGrid
+ * @tparam kBits 就是@brief中的kBits_2(一般是3)
+ */
 template <typename WrappedGrid, int kBits>
 class NestedGrid {
  public:
+  // NestedGrid::ValueType = FlatGrid::ValueType = float(double) ?
   using ValueType = typename WrappedGrid::ValueType;
 
   // Returns the number of voxels per dimension.
+  // 返回每个维度上的网格数量
+  // 每个NestedGrid，内部包含了(2^kBits_1 x 2^kBits_2, 2^kBits_1 x 2^kBits_2， 2^kBits_1 x 2^kBits_2)个网格
+  // 所以，grid_size = FlatGrid::grid_size() * 2^kBits_2
+  //                = 2^kBits_1 x 2^kBits_2
   static int grid_size() { return WrappedGrid::grid_size() << kBits; }
 
   // Returns the value stored at 'index', each dimension of 'index' being
   // between 0 and grid_size() - 1.
+  /**
+   * @brief 输入在本NestedGrid内给定网格的索引idx，获取对应的网格：
+   *        1. 先获取对应的FlatGrid索引
+   *        2. 再获取指定网格在FlatGrid中的内部索引
+   *        3. 从FlatGrid中获取网格
+   * @param index
+   * @return
+   */
   ValueType value(const Eigen::Array3i& index) const {
+    // 输入给定网格的索引idx，获取对应的FlatGrid的索引，称为meta_index
     const Eigen::Array3i meta_index = GetMetaIndex(index);
+    // 尝试取对应的FlatGrid，
+    // meta_cells_是一张二维的表格，储存着FlatGrid的指针
+    // 当初始化时，meta_cells_表格还是空的，在下面的mutable_value()函数中会进行构造和初始化，也就是开辟空间
     const WrappedGrid* const meta_cell =
         meta_cells_[ToFlatIndex(meta_index, kBits)].get();
+    // 如果还没初始化，内存空间还开辟，随便返回一个ValueType()
     if (meta_cell == nullptr) {
       return ValueType();
     }
+    // 获取指定网格在FlatGrid中的索引，称为inner_index
     const Eigen::Array3i inner_index =
         index - meta_index * WrappedGrid::grid_size();
+    // 从FlatGrid取对应的网格，即为所需的网格
     return meta_cell->value(inner_index);
   }
 
   // Returns a pointer to the value at 'index' to allow changing it. If
   // necessary a new wrapped grid is constructed to contain that value.
+  /**
+   * @brief 输入给定网格的索引idx，获取对应的网格指针：
+   *        1. 先获取对应的FlatGrid索引
+   *        2. 检查对应的FlatGrid是否存在（开辟内存空间），如果还没初始化，则创建一个
+   *        4. 再获取指定网格在FlatGrid中的内部索引
+   *        5. 从FlatGrid中获取网格指针
+   * @param index
+   * @return
+   */
   ValueType* mutable_value(const Eigen::Array3i& index) {
     const Eigen::Array3i meta_index = GetMetaIndex(index);
     std::unique_ptr<WrappedGrid>& meta_cell =
@@ -176,6 +224,9 @@ class NestedGrid {
     return meta_cell->mutable_value(inner_index);
   }
 
+  /**
+   * @brief 内部实现的迭代器，注意是对底层网格的迭代
+   */
   // An iterator for iterating over all values not comparing equal to the
   // default constructed value.
   class Iterator {
@@ -233,48 +284,79 @@ class NestedGrid {
  private:
   // Returns the Eigen::Array3i (meta) index of the meta cell containing
   // 'index'.
+  /**
+   * @brief 输入给定网格的索引idx，获取对应的FlatGrid的索引，称为meta_index
+   * @param index 给定网格的索引idx
+   * @return
+   */
   Eigen::Array3i GetMetaIndex(const Eigen::Array3i& index) const {
     DCHECK((index >= 0).all()) << index;
+    // 获取给定网格对应的FlatGrid的索引，称为meta_index
     const Eigen::Array3i meta_index = index / WrappedGrid::grid_size();
     DCHECK((meta_index < (1 << kBits)).all()) << index;
     return meta_index;
   }
 
-  std::array<std::unique_ptr<WrappedGrid>, 1 << (3 * kBits)> meta_cells_;
+  std::array<std::unique_ptr<WrappedGrid>, 1 << (3 * kBits)> meta_cells_; ///< 表格，存放了2^(3kBits)个FlatGrid指针
 };
 
 // A grid consisting of 2x2x2 grids of type 'WrappedGrid' initially. Wrapped
 // grids are constructed on first access via 'mutable_value()'. If necessary,
 // the grid grows to twice the size in each dimension. The range of indices is
 // (almost) symmetric around the origin, i.e. negative indices are allowed.
+/**
+ * @brief 数据结构层面上，3D地图的最上层，后面的实现只是继承这个类
+ * 初始时，内部包含了(2 x 2 x 2)个NestedGrid，后续可扩展
+ * 也就是每个DynamicGrid，内部包含了(2 x 2^kBits_1 x 2^kBits_2,            // 2 x 2^3 x 2^3 = 128
+ *                               2 x 2^kBits_1 x 2^kBits_2,
+ *                               2 x 2^kBits_1 x 2^kBits_2)个网格
+ * @tparam WrappedGrid
+ */
 template <typename WrappedGrid>
 class DynamicGrid {
  public:
+  // DynamicGrid::ValueType = NestedGrid::ValueType = FlatGrid::ValueType = float(double) ?
   using ValueType = typename WrappedGrid::ValueType;
 
+  /**
+   * @brief 构造函数，直接指定了 bits_ = 1 （后续这个bits_随地图扩大而增长）
+   */
   DynamicGrid() : bits_(1), meta_cells_(8) {}
   DynamicGrid(DynamicGrid&&) = default;
   DynamicGrid& operator=(DynamicGrid&&) = default;
 
   // Returns the current number of voxels per dimension.
+  // 获取每个维度上的网格数量
+  // 每个DynamicGrid，内部包含了(2 x 2 x 2)个NestedGrid
+  // 所以，grid_size = NestedGrid::grid_size() * 2
+  //                = 2^kBits_1 x 2^kBits_2 x 2
   int grid_size() const { return WrappedGrid::grid_size() << bits_; }
 
   // Returns the value stored at 'index'.
+  /**
+   * @brief 输入指定网格索引idx，获取概率地图中对应网格的值
+   * @param index
+   * @return
+   */
   ValueType value(const Eigen::Array3i& index) const {
+    // 输入指定网格索引idx,对输入的idx进行偏移，确保shifted_index均大于0
     const Eigen::Array3i shifted_index = index + (grid_size() >> 1);
     // The cast to unsigned is for performance to check with 3 comparisons
     // shifted_index.[xyz] >= 0 and shifted_index.[xyz] < grid_size.
     if ((shifted_index.cast<unsigned int>() >= grid_size()).any()) {
       return ValueType();
     }
+    // 尝试取对应的NestedGrid，如果为空，则返回ValueType()
     const Eigen::Array3i meta_index = GetMetaIndex(shifted_index);
     const WrappedGrid* const meta_cell =
         meta_cells_[ToFlatIndex(meta_index, bits_)].get();
     if (meta_cell == nullptr) {
       return ValueType();
     }
+    // 否则，则计算指定网格索引idx在NestedGrid中对应的索引inner_index
     const Eigen::Array3i inner_index =
         shifted_index - meta_index * WrappedGrid::grid_size();
+    // 进一步调用NestedGrid::value
     return meta_cell->value(inner_index);
   }
 
@@ -288,6 +370,9 @@ class DynamicGrid {
       Grow();
       return mutable_value(index);
     }
+    // 尝试取对应的NestedGrid，
+    // meta_cells_是一张二维的表格，储存着NestedGrid的指针
+    // 当初始化时，meta_cells_表格还是空的，在下面的mutable_value()函数中会进行构造和初始化，也就是开辟空间
     const Eigen::Array3i meta_index = GetMetaIndex(shifted_index);
     std::unique_ptr<WrappedGrid>& meta_cell =
         meta_cells_[ToFlatIndex(meta_index, bits_)];
@@ -376,23 +461,31 @@ class DynamicGrid {
   // 'index'.
   Eigen::Array3i GetMetaIndex(const Eigen::Array3i& index) const {
     DCHECK((index >= 0).all()) << index;
+    // 获取给定网格对应的NestedGrid的索引，称为meta_index
     const Eigen::Array3i meta_index = index / WrappedGrid::grid_size();
     DCHECK((meta_index < (1 << bits_)).all()) << index;
     return meta_index;
   }
 
   // Grows this grid by a factor of 2 in each of the 3 dimensions.
+  /**
+   * @brief 对当前地图进行扩展，每个维度上扩展为原来的两倍
+   */
   void Grow() {
     const int new_bits = bits_ + 1;
     CHECK_LE(new_bits, 8);
+    // 新创建一个std::vector<std::unique_ptr<WrappedGrid>>
     std::vector<std::unique_ptr<WrappedGrid>> new_meta_cells_(
         8 * meta_cells_.size());
+    // move操作
     for (int z = 0; z != (1 << bits_); ++z) {
       for (int y = 0; y != (1 << bits_); ++y) {
         for (int x = 0; x != (1 << bits_); ++x) {
           const Eigen::Array3i original_meta_index(x, y, z);
+          // 计算原来的索引在扩展后的地图中的索引
           const Eigen::Array3i new_meta_index =
               original_meta_index + (1 << (bits_ - 1));
+          // move操作
           new_meta_cells_[ToFlatIndex(new_meta_index, new_bits)] =
               std::move(meta_cells_[ToFlatIndex(original_meta_index, bits_)]);
         }
@@ -410,6 +503,10 @@ template <typename ValueType>
 using GridBase = DynamicGrid<NestedGrid<FlatGrid<ValueType, 3>, 3>>;
 
 // Represents a 3D grid as a wide, shallow tree.
+/**
+ * @brief 在DynamicGrid<NestedGrid<FlatGrid<ValueType, 3>, 3>>基础上，增加了resolution相关内容
+ * @tparam ValueType
+ */
 template <typename ValueType>
 class HybridGridBase : public GridBase<ValueType> {
  public:
@@ -418,6 +515,10 @@ class HybridGridBase : public GridBase<ValueType> {
   // Creates a new tree-based probability grid with voxels having edge length
   // 'resolution' around the origin which becomes the center of the cell at
   // index (0, 0, 0).
+  /**
+   * @brief 给定分辨率，创建概率网格
+   * @param resolution
+   */
   explicit HybridGridBase(const float resolution) : resolution_(resolution) {}
 
   float resolution() const { return resolution_; }
@@ -425,14 +526,25 @@ class HybridGridBase : public GridBase<ValueType> {
   // Returns the index of the cell containing the 'point'. Indices are integer
   // vectors identifying cells, for this the coordinates are rounded to the next
   // multiple of the resolution.
+  /**
+   * @brief 输入点坐标，获取对应的网格索引idx
+   * @param point
+   * @return
+   */
   Eigen::Array3i GetCellIndex(const Eigen::Vector3f& point) const {
     Eigen::Array3f index = point.array() / resolution_;
+    // std::lround四舍五入取整
     return Eigen::Array3i(common::RoundToInt(index.x()),
                           common::RoundToInt(index.y()),
                           common::RoundToInt(index.z()));
   }
 
   // Returns one of the octants, (0, 0, 0), (1, 0, 0), ..., (1, 1, 1).
+  /**
+   * @brief 输入[0~8)的整数，获取对应的网格
+   * @param i
+   * @return
+   */
   static Eigen::Array3i GetOctant(const int i) {
     DCHECK_GE(i, 0);
     DCHECK_LT(i, 8);
@@ -441,6 +553,11 @@ class HybridGridBase : public GridBase<ValueType> {
   }
 
   // Returns the center of the cell at 'index'.
+  /**
+   * @brief 输入网格索引idx，返回对应网格的中心点
+   * @param index
+   * @return
+   */
   Eigen::Vector3f GetCenterOfCell(const Eigen::Array3i& index) const {
     return index.matrix().cast<float>() * resolution_;
   }
@@ -465,11 +582,28 @@ class HybridGridBase : public GridBase<ValueType> {
 // require the grid to grow dynamically. For centimeter resolution, points
 // can only be tens of meters from the origin.
 // The hard limit of cell indexes is +/- 8192 around the origin.
+/**
+ * @brief 3D的地图类型，最顶层
+ *
+ * template <typename ValueType>
+ * using GridBase = DynamicGrid<NestedGrid<FlatGrid<ValueType, 3>, 3> >;
+ *
+ * HybridGridBase 继承 DynamicGrid<NestedGrid<FlatGrid<ValueType, 3>, 3>>
+ * class HybridGridBase : public GridBase<ValueType>
+ */
 class HybridGrid : public HybridGridBase<uint16> {
  public:
+  /**
+   * @brief 构造函数，主要是初始化基类HybridGridBase<uint16>
+   * @param resolution
+   */
   explicit HybridGrid(const float resolution)
       : HybridGridBase<uint16>(resolution) {}
 
+  /**
+   * @brief 从文件中读取地图数据
+   * @param proto
+   */
   explicit HybridGrid(const proto::HybridGrid& proto)
       : HybridGrid(proto.resolution()) {
     CHECK_EQ(proto.values_size(), proto.x_indices_size());
@@ -484,10 +618,18 @@ class HybridGrid : public HybridGridBase<uint16> {
   }
 
   // Sets the probability of the cell at 'index' to the given 'probability'.
+  /**
+   * @brief 输入指定网格索引idx，以及对应的概率，计算概率对应的uint16整数，并赋值
+   * @param index
+   * @param probability
+   */
   void SetProbability(const Eigen::Array3i& index, const float probability) {
     *mutable_value(index) = ProbabilityToValue(probability);
   }
 
+  /**
+   * @brief 完成空闲概率的更新(实际上就是减去查表的时候,表格中所附带的一个偏移值kUpdateMarker)
+   */
   // Finishes the update sequence.
   void FinishUpdate() {
     while (!update_indices_.empty()) {
@@ -504,21 +646,38 @@ class HybridGrid : public HybridGridBase<uint16> {
   //
   // If this is the first call to ApplyOdds() for the specified cell, its value
   // will be set to probability corresponding to 'odds'.
+  /**
+   * @brief 通过查表来更新给定索引[x,y,z]网格单元的空闲概率
+   * @param index
+   * @param table
+   * @return
+   */
   bool ApplyLookupTable(const Eigen::Array3i& index,
                         const std::vector<uint16>& table) {
     DCHECK_EQ(table.size(), kUpdateMarker);
+    // 取对应索引的网格指针uint16*
     uint16* const cell = mutable_value(index);
+    // 如果网格的值大于阈值kUpdateMarker，则直接返回false
     if (*cell >= kUpdateMarker) {
       return false;
     }
+    // 否则，在update_indices_队列中加入该cell网格指针
     update_indices_.push_back(cell);
+    // 查表?
     *cell = table[*cell];
     DCHECK_GE(*cell, kUpdateMarker);
     return true;
   }
 
   // Returns the probability of the cell with 'index'.
+  /**
+   * @brief 获取指定索引网格的概率
+   * @param index
+   * @return
+   */
   float GetProbability(const Eigen::Array3i& index) const {
+    // 先调用value(index)取出uint16类型的值
+    // 然后ValueToProbability()转换为float概率
     return ValueToProbability(value(index));
   }
 
@@ -541,7 +700,7 @@ class HybridGrid : public HybridGridBase<uint16> {
 
  private:
   // Markers at changed cells.
-  std::vector<ValueType*> update_indices_;
+  std::vector<ValueType*> update_indices_;  ///< 记录更新过的栅格单元的存储索引
 };
 
 struct AverageIntensityData {

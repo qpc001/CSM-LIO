@@ -43,10 +43,12 @@ namespace {
 
 // Subscribes to the 'topic' using the 'node_handle' and
 // calls 'handler' on the 'node' to handle messages. Returns the subscriber.
+// 调用ROS的节点句柄_node_handle订阅topic, 传入参数如下
+// (订阅的回调函数, topic , ROS的节点句柄_node_handle )
 template <typename MessageType>
 ::ros::Subscriber SubscribeWithHandler(
     void (Node::*handler)(const std::string&,
-        const typename MessageType::ConstPtr&), /*通过函数指针的方式传递回调函数*/
+                          const typename MessageType::ConstPtr&), /*通过函数指针的方式传递回调函数*/
     const std::string& topic,
     ::ros::NodeHandle* const node_handle, 
     Node* const node /*这个参数是类对象指针，刚好可以用this指针来传值*/ ) 
@@ -114,6 +116,11 @@ sensor_msgs::PointCloud2 FromPointCloudToRosPointCloud2 (
 
 std::string mutable_frame_id_; // used by the below function.
 std::unordered_map<std::string, bool> warned_table;
+/**
+ * @brief 去除frame_id开头的斜杠'/'
+ * @param frame_id
+ * @return
+ */
 const std::string& CheckNoLeadingSlash(const std::string& frame_id) {
     if (frame_id.size() > 0) {
         // CHECK_NE(frame_id[0], '/') << "The frame_id " << frame_id
@@ -260,10 +267,16 @@ bool Node::Start()
 
     // 常规开启流程。
     AddSensorSamplers(trajectory_options_);
+    // 加载订阅器,订阅传感器topic,并设置相关回调
     LaunchSubscribers(trajectory_options_);
+
+    // 创建定时器
     wall_timers_.push_back(node_handle_.createWallTimer(
         ::ros::WallDuration(kTopicMismatchCheckDelaySec),
         &Node::MaybeWarnAboutTopicMismatch, this, /*oneshot=*/true));
+
+    // 遍历预期的传感器id和topic
+    // 将订阅过的topic记录下来
     for (const auto& sensor_id : expected_sensor_ids_) {
         subscribed_topics_.insert(sensor_id.id);
     }
@@ -275,7 +288,11 @@ bool Node::Start()
 
     return true;
 }
-
+/**
+ * @brief 回调:处理imu数据
+ * @param[in] sensor_id 这里传进来的是topic，具体可以看SubscribeWithHandler()函数内部
+ * @param[in] msg
+ */
 void Node::HandleImuMessage(
     const std::string& sensor_id,
     const sensor_msgs::Imu::ConstPtr& msg) 
@@ -284,6 +301,7 @@ void Node::HandleImuMessage(
     //     << msg->header.frame_id << "), stamp (" << msg->header.stamp << ").";
 
     std::lock_guard<std::mutex> lock(inward_mutex_);
+    // 检查是否达到频率，超过频率则return
     if (!sensor_samplers_->imu_sampler.Pulse()) {
         return;
     }
@@ -299,6 +317,8 @@ void Node::HandleImuMessage(
             "http://docs.ros.org/api/sensor_msgs/html/msg/Imu.html.";
 
     const ::csmlio::common::Time time = FromRos(msg->header.stamp);
+    // 查询输入坐标系到tracking_frame_的TF变换
+    // 返回std::unique_ptr<Rigid3d>类型的外参
     const auto sensor_to_tracking = tf_bridge_->LookupToTracking(
         time, CheckNoLeadingSlash(msg->header.frame_id));
     if (sensor_to_tracking == nullptr) {
@@ -307,6 +327,7 @@ void Node::HandleImuMessage(
             << trajectory_options_.tracking_frame << ").";
         return;
     }
+    // 为啥要求IMU到tracking_frame_的平移为0？
     CHECK(sensor_to_tracking->translation().norm() < 1e-5)
         << "The IMU frame must be colocated with the tracking frame. "
             "Transforming linear acceleration into the tracking frame will "
@@ -315,11 +336,13 @@ void Node::HandleImuMessage(
     // 保存IMU数据到缓存队列
     {
         std::unique_lock<std::mutex> lock(postproc_mutex_);
+        // 将IMU数据转换到tracking_frame_坐标系，并保存到imu_queue_（用于去畸变？）
         imu_queue_.push_back(
             ::csmlio::sensor::ImuData{time, 
                 sensor_to_tracking->rotation() * ToEigen(msg->linear_acceleration),
                 sensor_to_tracking->rotation() * ToEigen(msg->angular_velocity)});
-        while (imu_queue_.size() > 10 && 
+        // 限制IMU队列长度（SIZE && 缓存时间长度）
+        while (imu_queue_.size() > 10 &&
             ::csmlio::common::ToSeconds(imu_queue_.back().time - imu_queue_.front().time) 
                 > kDataCacheMaxTimeToKeep)
         {
@@ -327,6 +350,7 @@ void Node::HandleImuMessage(
         }
     }
 
+    // 添加: 转换到'tracking_frame_'坐标系之后的加速度和角速度
     csm_lio_->AddSensorData(
         sensor_id, 
         ::csmlio::sensor::ImuData{time, 
@@ -438,6 +462,11 @@ void Node::HandleNavSatFixMessage(
 
 ::ros::NodeHandle* Node::node_handle() { return &node_handle_; }
 
+/**
+ * @brief 根据轨迹选项(订阅了哪些topic),返回预期的传感器id
+ * @param options
+ * @return std::set{SensorId(RANGE, "velodyne_points"), SensorId(IMU, "imu"), ...}
+ */
 std::set<csmlio::mapping::SensorId>
 Node::ComputeExpectedSensorIds(const TrajectoryOptions& options) const 
 {
@@ -468,6 +497,10 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options)
     // PointCloud2
     for (const std::string& topic :
         GenerateRepeatedTopicNames(kPointCloud2Topic, options.num_point_clouds)) {
+
+        // SubscribeWithHandler函數: 调用ROS的节点句柄_node_handle订阅topic, 传入参数如下
+        // (订阅的回调函数, topic , ROS的节点句柄_node_handle )
+        // 返回对应的订阅器, 存到subscribers_
         subscribers_.push_back(
             {SubscribeWithHandler<sensor_msgs::PointCloud2>(
                 &Node::HandlePointCloud2Message, 
@@ -478,7 +511,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options)
         LOG(INFO) << "## Registered callback for topic " 
             << subscribers_.back().topic << ".";
     }
-    // IMU
+    // IMU(cartographer-3D必须要有IMU)
     subscribers_.push_back(
         {SubscribeWithHandler<sensor_msgs::Imu>(
             &Node::HandleImuMessage,

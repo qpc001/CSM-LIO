@@ -97,6 +97,11 @@ CSMLidarInertialOdometry::~CSMLidarInertialOdometry()
     sensor_collator_->FinishTrajectory(trajectory_id_);
 }
 
+/**
+ * @brief 与ros的数据回调相连，由ros_wrapper.cc调用
+ * @param sensor_id
+ * @param timed_point_cloud_data
+ */
 void CSMLidarInertialOdometry::AddSensorData(
     const std::string& sensor_id,
     const sensor::TimedPointCloudData& timed_point_cloud_data) 
@@ -105,6 +110,11 @@ void CSMLidarInertialOdometry::AddSensorData(
         sensor::MakeDispatchable(sensor_id, timed_point_cloud_data));
 }
 
+/**
+ * @brief 与ros的数据回调相连，由ros_wrapper.cc调用
+ * @param sensor_id
+ * @param imu_data
+ */
 void CSMLidarInertialOdometry::AddSensorData(
     const std::string& sensor_id,
     const sensor::ImuData& imu_data) 
@@ -112,6 +122,11 @@ void CSMLidarInertialOdometry::AddSensorData(
     AddDataToCollator(sensor::MakeDispatchable(sensor_id, imu_data));
 }
 
+/**
+ * @brief 与ros的数据回调相连，由ros_wrapper.cc调用
+ * @param sensor_id
+ * @param odometry_data
+ */
 void CSMLidarInertialOdometry::AddSensorData(
     const std::string& sensor_id,
     const sensor::OdometryData& odometry_data) 
@@ -119,12 +134,27 @@ void CSMLidarInertialOdometry::AddSensorData(
     AddDataToCollator(sensor::MakeDispatchable(sensor_id, odometry_data));
 }
 
+/**
+ * @brief 由上面的3个CSMLidarInertialOdometry::AddSensorData()函数来调用，
+ * 内部会调用Collator::AddSensorData来添加数据到队列中
+ * @param data
+ */
 void CSMLidarInertialOdometry::AddDataToCollator(
     std::unique_ptr<sensor::Data> data) 
 {
     sensor_collator_->AddSensorData(trajectory_id_, std::move(data));
 }
 
+/**
+ * @brief 数据流通的关键回调，调用顺序如下:
+ * 1. ros侧的数据回调到上面的3个CSMLidarInertialOdometry::AddSensorData()函数
+ * 2. CSMLidarInertialOdometry::AddSensorData()内部调用CSMLidarInertialOdometry::AddDataToCollator
+ * 3. CSMLidarInertialOdometry::AddDataToCollator内部调用Collator::AddSensorData来添加数据到队列中
+ * 4. Collator::AddSensorData内部调用OrderedMultiQueue::Add向阻塞队列中添加数据，同时触发OrderedMultiQueue::Dispatch()来分发所有队列中时间上最早的数据
+ * 5. OrderedMultiQueue::Dispatch()触发此回调函数CSMLidarInertialOdometry::HandleCollatedData
+ * @param sensor_id
+ * @param data
+ */
 void CSMLidarInertialOdometry::HandleCollatedData(
     const std::string& sensor_id,
     std::unique_ptr<sensor::Data> data)
@@ -138,10 +168,15 @@ void CSMLidarInertialOdometry::HandleCollatedData(
     }
     ++counts;
 
-    // 冠华：我们用虚基类（多态性）解决了【dispatchable.h】与
-    // 【csm_lidar_inertial_odometry.h】交叉包含的问题；
-    // 现在数据可以从sensor::Data中进到CSMLidarInertialOdometry的回调了，
-    // 数据流通正常，终于可以睡觉了！
+
+    ///整个函数就这里有用
+    // 这里的data 类型应该是 class Dispatchable : public Data  (具体见dispatchable.h)
+    // 将数据交给wrapped_trajectory_builder_
+    // 也就是GlobalTrajectoryBuilder<LocalTrajectoryBuilder2D, mapping::PoseGraph2D>> 类的对象
+    // 即调用GlobalTrajectoryBuilder<LocalTrajectoryBuilder2D, mapping::PoseGraph2D>>::AddSensorData(sensor_id_, data_)
+    // data->AddToTrajectoryBuilder(wrapped_trajectory_builder_.get());
+
+    // 此处被改为了调用Data::AddToLIO()
     data->AddToLIO(this);
 }
 

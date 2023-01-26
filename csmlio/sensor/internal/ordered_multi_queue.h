@@ -46,10 +46,14 @@ struct QueueKey {
 // queue before dispatching the next time ordered value across all queues.
 //
 // This class is thread-compatible.
-// 翻译翻译什么叫惊喜？
-// 惊喜就是：每一次添加数据，都会尝试从注册队列中下发已存在的数据；
-// 下发时，需要满足一定的条件，比如所有注册队列不能为空、所有的数据需满足时间顺序等；
-// 下发时，为穷尽式下发 —— 即能发尽发，一个while循环不断下发一次数据，直到不满足条件退出循环。
+/**
+ * @brief 这个类维护了多个储存传感器数据的队列，并且根据储存的顺序进行分发(Dispatch)
+ * 对于没有被调用FinishTrajectory ... MarkQueueAsFinished的队列，本类将等待至少一个数据来进行分发
+ *
+ * 这个类是线程兼容的
+ * 线程兼容（Thread-compatible）：此类提供对const方法的安全并发访问，但需要对非const（或混合const /非const访问）进行同步。
+ * 这样，唯一的用例就是对象（通常是全局对象），这些对象以线程安全的方式（在启动的单线程阶段或通过线程安全的静态局部局部化范式惰性地初始化）
+ */
 class OrderedMultiQueue {
   public:
     using Callback = std::function<void(std::unique_ptr<Data>)>;

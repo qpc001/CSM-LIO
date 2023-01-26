@@ -23,7 +23,10 @@
 
 namespace csmlio {
 namespace mapping {
-
+/**
+ * @brief 这个SensorId在原版cartographer中是由trajectory_builder_options.proto文件定义的结构
+ * 此处被直接换成C++结构体了
+ */
 struct SensorId {
     enum class SensorType {
         RANGE = 0,
@@ -64,26 +67,32 @@ struct TimedPose {
     transform::Rigid3d pose;
 };
 
+// 子图插入结果
 struct InsertionResult {
     // NodeId node_id; //TrajBuilderInterface版本【弃】；LocalTrajBuilder3D版本中【没有】此变量
+
+    // 轨迹节点结构体(重力对齐四元数, 重力对齐并且滤波后的点云 , {} {} {} ,
+    //              局部SLAM的节点位姿(scanMatching位姿估计: 机器人在子图坐标系的坐标) )
     std::shared_ptr<const TrajectoryNode::Data> constant_data;
     // std::vector<std::shared_ptr<const Submap>> insertion_submaps; //TrajBuilderInterface版本【弃】
     std::vector<std::shared_ptr<const mapping::Submap3D>> insertion_submaps; //LocalTrajBuilder3D版本
 };
 
+// 匹配结果
 struct MatchingResult {
-    common::Time time;
-    transform::Rigid3d local_pose;
-    sensor::RangeData range_data_in_local;
+    common::Time time;                              // 时间戳
+    transform::Rigid3d local_pose;                  // 匹配的位姿估计(机器人在local map的位姿)
+    sensor::RangeData range_data_in_local;          // 转换到local map坐标系下的激光点云
     // 'nullptr' if not asigned value; used to pass what ever you want.
-    std::shared_ptr<::csmlio::sensor::PointCloud> point_cloud;
+    std::shared_ptr<::csmlio::sensor::PointCloud> point_cloud;  // 转换到local map坐标系下的激光点云
     // 'nullptr' if dropped by the motion filter.
-    std::unique_ptr<const InsertionResult> insertion_result;
+    std::unique_ptr<const InsertionResult> insertion_result;    //插入结果
 };
 
 // A callback which is called after local SLAM processes an accumulated
 // 'sensor::RangeData'. If the data was inserted into a submap, reports the
 // assigned 'NodeId', otherwise 'nullptr' if the data was filtered out.
+// 等价于原版carto的<LocalSlamResultCallback>
 using LioResultCallback =
     std::function<void(common::Time,
                        transform::Rigid3d /* local pose estimate */,
