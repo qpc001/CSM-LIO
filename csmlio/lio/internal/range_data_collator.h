@@ -44,7 +44,7 @@ class RangeDataCollator {
   private:
     sensor::TimedPointCloudOriginData CropAndMerge();
 
-    const std::set<std::string> expected_sensor_ids_;
+    const std::set<std::string> expected_sensor_ids_;   ///< 这里存放的sensor_ids都是与点云相关的
     // Store at most one message for each sensor.
     std::map<std::string, sensor::TimedPointCloudData> id_to_pending_data_;
     // wgh 每次在AddRangeData中更新以下时间段，然后CropAndMerge根据这个时间段裁剪和拼接数据！

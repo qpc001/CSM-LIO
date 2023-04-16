@@ -69,6 +69,7 @@ sensor::TimedPointCloudOriginData RangeDataCollator::AddRangeData(
 
     // wgh ## case02 如果不存在单个sensor的数据堆积，则仅在所有sensorId都有数据时，才会继续 ##
     id_to_pending_data_.emplace(sensor_id, std::move(timed_point_cloud_data));
+    // TODO: 这里是否会造成，如果其中某个传感器没数据了，而其他正常的传感器数据被阻塞这这里?  [epsilon.john]
     if (expected_sensor_ids_.size() != id_to_pending_data_.size()) {
         return {};
     }
@@ -76,6 +77,7 @@ sensor::TimedPointCloudOriginData RangeDataCollator::AddRangeData(
     // wgh ## case03 如果所有队列都集齐了1帧数据，则按照最旧的那一帧作为时间段终点，进行数据拼接和下发 ##
     current_start_ = current_end_;
     // We have messages from all sensors, move forward to oldest.
+    // 遍历所有在id_to_pending_data_内的点云数据，找到时间戳最小的
     common::Time oldest_timestamp = common::Time::max();
     for (const auto& pair : id_to_pending_data_) {
         oldest_timestamp = std::min(oldest_timestamp, pair.second.time);
@@ -94,11 +96,12 @@ sensor::TimedPointCloudOriginData RangeDataCollator::CropAndMerge()
   for (auto it = id_to_pending_data_.begin();
        it != id_to_pending_data_.end();) 
   {
+    // 取某个sensor的点云
     sensor::TimedPointCloudData& data = it->second;
     const sensor::TimedPointCloud& ranges = it->second.ranges;
     const std::vector<float>& intensities = it->second.intensities;
 
-    // step01 找到当前sensor数据中位于[curr_start_, current_end_]区间内的第一个点（开始计入的地方）
+    // step01 找到当前sensor点云位于[curr_start_, current_end_]区间内的第一个点（开始计入的地方）
     auto overlap_begin = ranges.begin();
     while (overlap_begin < ranges.end() &&
            data.time + common::FromSeconds((*overlap_begin).time) < current_start_) 
@@ -120,21 +123,32 @@ sensor::TimedPointCloudOriginData RangeDataCollator::CropAndMerge()
     // step03 核心任务 -- 将点的相对时间戳对齐到“融合后的帧”，然后把点放入结果中。
     // Copy overlapping range.
     if (overlap_begin < overlap_end) {
+      // origin_index: 用来标记这个点是属于那个sensor的，与sensor的原点origin相对应
       std::size_t origin_index = result.origins.size();
       result.origins.push_back(data.origin);
+      // time_correction = 该帧点云扫描结束时刻 - current_end_
       const float time_correction =
           static_cast<float>(common::ToSeconds(data.time - current_end_));
       auto intensities_overlap_it =
           intensities.begin() + (overlap_begin - ranges.begin());
       result.ranges.reserve(result.ranges.size() +
                             std::distance(overlap_begin, overlap_end));
+      // 遍历[curr_start_, current_end_]区间内的点
       for (auto overlap_it = overlap_begin; overlap_it != overlap_end;
            ++overlap_it, ++intensities_overlap_it) {
+        // 构造成新的结构  sensor::TimedPointCloudOriginData::RangeMeasurement
+        // {TimedRangefinderPoint, float, origin_index}
         sensor::TimedPointCloudOriginData::RangeMeasurement point{
             *overlap_it, *intensities_overlap_it, origin_index};
         // current_end_ + point_time[3]_after == in_timestamp +
         // point_time[3]_before
+
+        // 计算该点相对于current_end_的相对时间关系，保存到point.point_time.time
+        // point.point_time.time = point.point_time.time + 该帧点云扫描结束时刻 - current_end_
+        // point.point_time.time = 相对于该帧扫描结束时刻 + 该帧点云扫描结束时刻 - current_end_
+        // point.point_time.time = 相对于current_end_的时间
         point.point_time.time += time_correction;
+        // 保存该点
         result.ranges.push_back(point);
       }
     }
@@ -142,13 +156,18 @@ sensor::TimedPointCloudOriginData RangeDataCollator::CropAndMerge()
     // step04 把[curr_start_, current_end_]区间内的点丢弃，
     //        注意，我们不会丢掉current_end_之后的点！
     // Drop buffered points until overlap_end.
+    // 如果overlap_end这个点刚好是当前这个sensor这一帧点云的最后一个点
+    // 那么，这帧点云就用完了，可以丢掉
     if (overlap_end == ranges.end()) {
       it = id_to_pending_data_.erase(it);
     } 
     else if (overlap_end == ranges.begin()) {
+      // 如果overlap_end这个点刚好是当前这个sensor这一帧点云的第一个点，则啥也不干，表示这帧点云后面还有用
       ++it;
     } 
     else {
+      // 更新这一帧点云（因为data指向id_to_pending_data_内某个元素的引用）
+      // 只保留这帧点云[overlap_end, ranges.end()]区间内的点，即overlap_end后的点，以后还会用到这些点
       const auto intensities_overlap_end =
           intensities.begin() + (overlap_end - ranges.begin());
       data = sensor::TimedPointCloudData{

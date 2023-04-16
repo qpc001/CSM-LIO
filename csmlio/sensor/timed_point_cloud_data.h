@@ -24,13 +24,13 @@
 namespace csmlio {
 namespace sensor {
 
-// wgh ROS层向算法层传递点云数据的结构
+// ROS层向算法层传递点云数据的结构, {时间戳(该帧点云扫描结束时刻),激光雷达坐标系在'tracking_frame_'坐标系的坐标, 'tracking_frame_'坐标系的点云，点云的强度数据}
 struct TimedPointCloudData {
-  common::Time time;
-  Eigen::Vector3f origin;   // 通常是sensor_in_tracking的xyz坐标(静态TF).
-  TimedPointCloud ranges;
+  common::Time time;        // 时间戳(该帧点云扫描结束时刻)
+  Eigen::Vector3f origin;   // 激光雷达坐标系在'tracking_frame_'坐标系的坐标
+  TimedPointCloud ranges;   // 'tracking_frame_'坐标系的点云
   // 'intensities' has to be same size as 'ranges', or empty.
-  std::vector<float> intensities;
+  std::vector<float> intensities;   // 点云的强度数据
 };
 
 struct TimedPointCloudOriginData {

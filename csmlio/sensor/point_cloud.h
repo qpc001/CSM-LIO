@@ -30,6 +30,9 @@ namespace sensor {
 
 // Stores 3D positions of points together with some additional data, e.g.
 // intensities.
+/**
+ * @brief 主要使用的点云数据结构,但是没有时间属性
+ */
 class PointCloud {
  public:
   using PointType = RangefinderPoint;
@@ -85,6 +88,7 @@ class PointCloud {
 
  private:
   // For 2D points, the third entry is 0.f.
+  // 储存3D点的位置，对于2D，则第3维=0
   std::vector<PointType> points_;
   // Intensities are optional. If non-empty, they must have the same size as
   // points.
@@ -96,25 +100,31 @@ class PointCloud {
 // the last point was acquired. So, the fourth entry for the last point is 0.f.
 // If timing is not available, all fourth entries are 0.f. For 2D points, the
 // third entry is 0.f (and the fourth entry is time).
+// 储存3D点位置以及它们的相对测量时间，储存在第4维
 using TimedPointCloud = std::vector<TimedRangefinderPoint>;
 
 // TODO(wohe): Retained for cartographer_ros. To be removed once it is no
 // longer used there.
+// 旧版的点云数据结构，主要是使用TimedPointCloud，多了个时间属性，可以用来去畸变
 struct PointCloudWithIntensities {
   TimedPointCloud points;
   std::vector<float> intensities;
 };
 
 // Transforms 'point_cloud' according to 'transform'.
+// 根据3D变换，对点云进行刚体变换
 PointCloud TransformPointCloud(const PointCloud& point_cloud,
                                const transform::Rigid3f& transform);
 
 // Transforms 'point_cloud' according to 'transform'.
+// Transforms 'point_cloud' according to 'transform'.
+// 根据3D变换，对点云进行刚体变换
 TimedPointCloud TransformTimedPointCloud(const TimedPointCloud& point_cloud,
                                          const transform::Rigid3f& transform);
 
 // Returns a new point cloud without points that fall outside the region defined
 // by 'min_z' and 'max_z'.
+// 通过设置z轴的范围，去除范围以外的点，返回区域内的点云
 PointCloud CropPointCloud(const PointCloud& point_cloud, float min_z,
                           float max_z);
 

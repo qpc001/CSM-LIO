@@ -191,25 +191,36 @@ sensor_msgs::PointCloud2 ToPointCloud2Message(
     return msg;
 }
 
+/**
+ * @brief 将ros点云类型转成sensor::PointCloudWithIntensities
+ * @param msg
+ * @return
+ */
 std::tuple<::csmlio::sensor::PointCloudWithIntensities,
            ::csmlio::common::Time>
 ToPointCloudWithIntensities(const sensor_msgs::PointCloud2& msg) 
 {
+    // 声明一个旧版的点云结构
     PointCloudWithIntensities point_cloud;
     // We check for intensity field here to avoid run-time warnings if we pass in
     // a PointCloud2 without intensity.
-    if (PointCloud2HasField(msg, "intensity")) {
-        if (PointCloud2HasField(msg, "time")) {
+    if (PointCloud2HasField(msg, "intensity")) {        // 检查ros点云数据是否有"intensity"属性
+        if (PointCloud2HasField(msg, "time")) {         // 检查ros点云数据是否有"time"属性
+        // 进入到这里，表示有 [intensity] 和 [time]
+        // ros -> pcl
         pcl::PointCloud<PointXYZIT> pcl_point_cloud;
         pcl::fromROSMsg(msg, pcl_point_cloud);
+        // 预留空间
         point_cloud.points.reserve(pcl_point_cloud.size());
         point_cloud.intensities.reserve(pcl_point_cloud.size());
+        // 逐点拷贝
         for (const auto& point : pcl_point_cloud) {
             point_cloud.points.push_back(
                 {Eigen::Vector3f{point.x, point.y, point.z}, point.time});
             point_cloud.intensities.push_back(point.intensity);
         }
         } else {
+        // 进入到这里，表示有 [intensity]
         pcl::PointCloud<pcl::PointXYZI> pcl_point_cloud;
         pcl::fromROSMsg(msg, pcl_point_cloud);
         point_cloud.points.reserve(pcl_point_cloud.size());
@@ -223,6 +234,7 @@ ToPointCloudWithIntensities(const sensor_msgs::PointCloud2& msg)
     } else {
         // If we don't have an intensity field, just copy XYZ and fill in 1.0f.
         if (PointCloud2HasField(msg, "time")) {
+        // 进入到这里，表示只有 [time]，那么在 [intensities]的值填固定的1
         pcl::PointCloud<PointXYZT> pcl_point_cloud;
         pcl::fromROSMsg(msg, pcl_point_cloud);
         point_cloud.points.reserve(pcl_point_cloud.size());
@@ -233,6 +245,7 @@ ToPointCloudWithIntensities(const sensor_msgs::PointCloud2& msg)
             point_cloud.intensities.push_back(1.0f);
         }
         } else {
+        // 进入到这里，表示没有 [intensities] 和 [time]，那么在 [intensities]的值填固定的1， [time]填0
         pcl::PointCloud<pcl::PointXYZ> pcl_point_cloud;
         pcl::fromROSMsg(msg, pcl_point_cloud);
         point_cloud.points.reserve(pcl_point_cloud.size());
@@ -244,10 +257,10 @@ ToPointCloudWithIntensities(const sensor_msgs::PointCloud2& msg)
         }
         }
     }
-    // 把帧的时间戳移动到最后一个点（而非ROS格式中的第一个点）
+    // 先取点云msg的时间（点云第一个点的时间）
     ::csmlio::common::Time timestamp = FromRos(msg.header.stamp);
     if (!point_cloud.points.empty()) {
-        // 一个更正确的、寻找点云中时间戳最大的点的方法；
+        // 取点云中时间戳最大的点对应的相对时间duration
         // 该方法支持“点云中的点并没有按时间先后顺序排序”的情形。
         const auto& all_points = point_cloud.points;
         const double duration = 
@@ -259,12 +272,17 @@ ToPointCloudWithIntensities(const sensor_msgs::PointCloud2& msg)
                 "(frame_id: " << msg.header.frame_id << ") larger than 100ms, "
                 "which is " << int(duration * 1000) << "ms.";
         }
+        // 最后一个点对应的时间戳timestamp
         timestamp += csmlio::common::FromSeconds(duration);
+        // 遍历点云
         for (auto& point : point_cloud.points) {
+            // 对点云的每个点的时间都减去一个值（该帧扫描的总时长，大概为0.1）
+            // 这么做是为了后续方便将点投影到扫描最后时刻?
             point.time -= duration;
             // CHECK_LE(point.time, 0.f)
             //     << "Encountered a point with a larger stamp than "
             //         "the last point in the cloud.";
+            // 减去之后，point.time理论上 <= 0
             if (point.time > 0.f) {
                 LOG(WARNING) << "Encountered a point with a larger stamp"
                     " than the last point in the cloud, will copy the last"

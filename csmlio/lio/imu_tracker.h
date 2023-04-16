@@ -27,8 +27,20 @@ namespace mapping {
 // accelerations from an IMU. Because averaged linear acceleration (assuming
 // slow movement) is a direct measurement of gravity, roll/pitch does not drift,
 // though yaw does.
+/**
+ * @brief 使用IMU的角速度和线加速度来保持跟踪姿态。
+ * 假设缓慢运动下，线加速度是重力的直接观测，并且roll/pitch不会漂移
+ *
+ * TODO: 当前这个ImuTracker比较简单，可以优化 [epsilon.john]
+ * 优点：进行了隔离，这个ImuTracker得到的姿态只与IMU数据有关，确保了连续性
+ */
 class ImuTracker {
  public:
+  /**
+   * @brief 构造函数，初始化成员变量
+   * @param imu_gravity_time_constant 重力常数
+   * @param time 第一帧imu时间
+   */
   ImuTracker(double imu_gravity_time_constant, common::Time time);
 
   // Advances to the given 'time' and updates the orientation to reflect this.
@@ -51,7 +63,7 @@ class ImuTracker {
   common::Time time_;
   common::Time last_linear_acceleration_time_;
   Eigen::Quaterniond orientation_;
-  Eigen::Vector3d gravity_vector_;
+  Eigen::Vector3d gravity_vector_;      ///< 重力向量在载体坐标系下的表示
   Eigen::Vector3d imu_angular_velocity_;
 };
 

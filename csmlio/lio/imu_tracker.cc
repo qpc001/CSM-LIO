@@ -36,21 +36,36 @@ ImuTracker::ImuTracker(const double imu_gravity_time_constant,
       gravity_vector_(Eigen::Vector3d::UnitZ()),
       imu_angular_velocity_(Eigen::Vector3d::Zero()) {}
 
+/**
+ * @brief 利用imu角速度信息更新姿态估计，同时更新重力向量在载体坐标系下的表示
+ * @param time
+ */
 void ImuTracker::Advance(const common::Time time) {
   CHECK_LE(time_, time);
+  // 计算delta_t，需要确保time_ < time
   const double delta_t = common::ToSeconds(time - time_);
+  // 姿态更新
   const Eigen::Quaterniond rotation =
       transform::AngleAxisVectorToRotationQuaternion(
           Eigen::Vector3d(imu_angular_velocity_ * delta_t));
   orientation_ = (orientation_ * rotation).normalized();
+  // 重力向量在载体坐标系下的表示
   gravity_vector_ = rotation.conjugate() * gravity_vector_;
   time_ = time;
 }
 
+/**
+ * @brief 1. 使用线加速度来表示重力向量在载体坐标系下的表示 2. 反求出当前载体的姿态
+ * TODO: 可以换
+ * @param imu_linear_acceleration
+ */
 void ImuTracker::AddImuLinearAccelerationObservation(
     const Eigen::Vector3d& imu_linear_acceleration) {
   // Update the 'gravity_vector_' with an exponential moving average using the
   // 'imu_gravity_time_constant'.
+  // 构造ImuTracker时，last_linear_acceleration_time_的值=common::Time::min()
+  // 第一次调用时，delta_t 会被赋值为std::numeric_limits<double>::infinity()
+  // 后续调用，delta_t = time_ - last_linear_acceleration_time_
   const double delta_t =
       last_linear_acceleration_time_ > common::Time::min()
           ? common::ToSeconds(time_ - last_linear_acceleration_time_)
@@ -79,6 +94,10 @@ void ImuTracker::AddImuLinearAccelerationObservation(
   // CHECK_GT((orientation_ * gravity_vector_).normalized().z(), 0.99);
 }
 
+/**
+ * @brief 将角速度信息保存到imu_angular_velocity_
+ * @param imu_angular_velocity
+ */
 void ImuTracker::AddImuAngularVelocityObservation(
     const Eigen::Vector3d& imu_angular_velocity) {
   imu_angular_velocity_ = imu_angular_velocity;

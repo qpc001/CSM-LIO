@@ -180,6 +180,22 @@ void CSMLidarInertialOdometry::HandleCollatedData(
     data->AddToLIO(this);
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////
+//// 下面的3个CSMLidarInertialOdometry::ProcessSensorData
+//// 1. 相当于 cartographer/mapping/internal/3d/local_trajectory_builder_3d.cc
+////    里面的LocalTrajectoryBuilder3D::AddImuData(), AddRangeData()
+//// 2. 此处的实现，相当于跳过了cartographer/mapping/internal/global_trajectory_builder.cc里面的
+////    GlobalTrajectoryBuilder::AddSensorData()
+//// 3. 或者说，此处的实现 = LocalTrajectoryBuilder3D::AddImuData(), AddRangeData() +
+///                       GlobalTrajectoryBuilder::AddSensorData()
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * @brief
+ * @param sensor_id
+ * @param timed_point_cloud_data 由以下几个东西组成:
+ * {时间戳(该帧点云扫描结束时刻), 激光雷达坐标系在'tracking_frame_'坐标系的坐标, 'tracking_frame_'坐标系的点云（TimedPointCloud类型）， 点云的强度数据}
+ */
 void CSMLidarInertialOdometry::ProcessSensorData(
     const std::string& sensor_id,
     const sensor::TimedPointCloudData& timed_point_cloud_data)
@@ -191,7 +207,7 @@ void CSMLidarInertialOdometry::ProcessSensorData(
     // 也许，这里相当于GlobalTrajBuilder层。
     LogSensorDataRate(sensor_id, timed_point_cloud_data.time);
 
-    // 开始处理。
+    // 开始处理
     auto matching_result = 
         AddRangeData(sensor_id, timed_point_cloud_data);
 
@@ -257,10 +273,15 @@ void CSMLidarInertialOdometry::ProcessSensorData(
     // LOG(INFO) << "Received imu data from collator. (sensor_id:" << sensor_id << ")";
     LogSensorDataRate(sensor_id, imu_data.time);
 
+    // 如果extrapolator_已经初始化
     if (extrapolator_ != nullptr) {
+        // 则直接进到这里，向extrapolator_添加IMU数据
         extrapolator_->AddImuData(imu_data);
+        // 然后直接返回
         return;
     }
+
+    /// 如果运行到这里，表明第一次进入到这个函数，extrapolator_还没初始化
 
     // 这里的意思是：如果我们已经积累/或已知了一段数据，则可以用这段数据初始化
     // IMU的bias等信息 —— 注意这种做法仅对ImuBasedPoseExtrapolator有效；
@@ -311,6 +332,11 @@ CSMLidarInertialOdometry::GetTimedPoseQueue() const
     return timed_pose_queue_;
 }
 
+/**
+ * @brief 这部分是从CollatedTrajectoryBuilder::HandleCollatedSensorData函数摘取出来的部分
+ * @param sensor_id
+ * @param data_stamp
+ */
 void CSMLidarInertialOdometry::LogSensorDataRate(
     const std::string& sensor_id, const common::Time& data_stamp)
 {

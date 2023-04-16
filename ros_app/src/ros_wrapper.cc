@@ -395,12 +395,14 @@ void Node::HandlePointCloud2Message(
     if (!sensor_samplers_->rangefinder_sampler.Pulse()) {
         return;
     }
+    // 将ros点云类型转成sensor::PointCloudWithIntensities
     ::csmlio::sensor::PointCloudWithIntensities point_cloud;
-    ::csmlio::common::Time time;
+    ::csmlio::common::Time time;    // 该帧点云最后一个点的时间（即扫描结束时刻）
     std::tie(point_cloud, time) = ToPointCloudWithIntensities(*msg);
     if (!point_cloud.points.empty()) {
         CHECK_LE(point_cloud.points.back().time, 0.f);
     }
+    // 查询点云坐标系到tracking_frame_的TF变换
     const auto sensor_to_tracking =
         tf_bridge_->LookupToTracking(time, CheckNoLeadingSlash(msg->header.frame_id));
     if (sensor_to_tracking == nullptr) {
@@ -436,6 +438,19 @@ void Node::HandlePointCloud2Message(
         }
     }
 
+    // 原版数据流:
+    // 1. sensor_bridge(ros)::HandlexxxMessage() =>
+    // 2. CollatedTrajectoryBuilder::AddSensorData()->AddData() =>
+    // 3. Collator::AddSensorData() =>
+    // 4. CollatedTrajectoryBuilder::HandleCollatedSensorData() =>
+    // 5. Dispatchable::AddToTrajectoryBuilder() =>
+    // 6. GlobalTrajectoryBuilder::AddSensorData() =>
+    // 7. LocalTrajectoryBuilder2D/LocalTrajectoryBuilder3D::Add...Data() 核心处理在这
+
+
+    // 这里把(1,2,3,4,5,6)都放到CSMLidarInertialOdometry里面了
+    // 这里构造了一个sensor::TimedPointCloudData类型数据：
+    // {时间戳(该帧点云扫描结束时刻), 激光雷达坐标系在'tracking_frame_'坐标系的坐标, 'tracking_frame_'坐标系的点云（TimedPointCloud类型）， 点云的强度数据}
     csm_lio_->AddSensorData(
         sensor_id, 
         ::csmlio::sensor::TimedPointCloudData{

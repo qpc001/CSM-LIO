@@ -34,6 +34,10 @@ namespace mapping {
 // Keep poses for a certain duration to estimate linear and angular velocity.
 // Uses the velocities to extrapolate motion. Uses IMU and/or odometry data if
 // available to improve the extrapolation.
+/**
+ * @brief 维护一定时间的poses来估计线速度和角速度，并且用这些速度信息来外推运动估计
+ * 如果有IMU和Odom信息，则可以用来提升估计精度
+ */
 class PoseExtrapolator : public PoseExtrapolatorInterface {
   public:
     explicit PoseExtrapolator(common::Duration pose_queue_duration,
@@ -84,8 +88,9 @@ class PoseExtrapolator : public PoseExtrapolatorInterface {
     const double gravity_time_constant_;
     std::deque<sensor::ImuData> imu_data_;
     std::unique_ptr<ImuTracker> imu_tracker_;
-    std::unique_ptr<ImuTracker> odometry_imu_tracker_;
-    std::unique_ptr<ImuTracker> extrapolation_imu_tracker_;
+    // 每次PoseExtrapolator::AddPose完之后，odometry_imu_tracker_, extrapolation_imu_tracker_是一个新的ImuTracker
+    std::unique_ptr<ImuTracker> odometry_imu_tracker_;      ///< 在PoseExtrapolator::AddOdometryData用到
+    std::unique_ptr<ImuTracker> extrapolation_imu_tracker_; ///
     TimedPose cached_extrapolated_pose_;
 
     std::deque<sensor::OdometryData> odometry_data_;
